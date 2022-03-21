@@ -2,6 +2,7 @@ CFLAGS = -I/usr/local/include/mnolth
 CFLAGS += -O3
 CFLAGS += -Wall -pedantic -std=c89
 LIBS += -lmnolth -ljack -lx264 -lm -lpthread
+CFLAGS+=-DLUA_USE_C89 -DLUA_COMPAT_5_2
 
 OBJ = rt.o server.o client.o
 

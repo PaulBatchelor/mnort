@@ -6,17 +6,21 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "scheme/scheme.h"
 #include "sndkit/lil/lil.h"
+
+#include "lua/lua.h"
+#include "lua/lauxlib.h"
+#include "lua/lualib.h"
 
 #define BUF_SIZE 500
 #define MAXHOST 1024
 #define MAXSERV 32
 
-scheme * mno_scm_new(lil_t lil);
 void mnort_loader(lil_t lil);
 void mno_clean(lil_t lil);
 static volatile int running = 1;
+void mno_lua_load(lua_State *L);
+void mno_lua_clean(lua_State *L);
 
 static lil_value_t stop(lil_t lil, size_t argc, lil_value_t *argv)
 {
@@ -39,10 +43,10 @@ int mno_rtserver(int argc, char *argv[])
     socklen_t peer_addr_len;
     ssize_t nread;
     char buf[BUF_SIZE];
-    lil_t lil;
-    scheme *sc;
     char host[MAXHOST], service[MAXSERV];
     const char *port;
+    lua_State *L;
+    lil_t lil;
 
     /*
     if (argc != 2) {
@@ -57,10 +61,14 @@ int mno_rtserver(int argc, char *argv[])
         port = argv[1];
     }
 
-    lil = lil_new();
-    loader(lil);
-    sc = mno_scm_new(lil);
+    L = luaL_newstate();
+    luaL_openlibs(L);
+    mno_lua_load(L);
 
+    lua_getglobal(L, "__lil");
+
+    lil = lua_touserdata(L, -1);
+    loader(lil);
 
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
@@ -121,17 +129,20 @@ int mno_rtserver(int argc, char *argv[])
             NI_NUMERICSERV
         );
         if (s == 0) {
+            int e;
             buf[nread] = '\0';
-            scheme_eval_string(sc, buf);
+            e = luaL_dostring(L, buf);
+            if (e != LUA_OK) {
+                fprintf(stderr,
+                        "eval error: %s\n",
+                        lua_tostring(L, -1));
+            }
         } else {
             fprintf(stderr, "getnameinfo: %s\n", gai_strerror(s));
         }
     }
 
-    mno_clean(lil);
-    lil_free(lil);
-    scheme_deinit(sc);
-    free(sc);
-
+    mno_lua_clean(L);
+    lua_close(L);
     return 0;
 }
